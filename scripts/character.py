@@ -84,7 +84,7 @@ def create_character(perfil=None, name="Character"):
 
 
 def _apply_perfil(human, perfil):
-    """Aplica un dict de proporciones al objeto Human."""
+    """Aplica un dict de proporciones al objeto Human y regenera el mesh."""
     mapping = {
         "gender":    "MPFB_HUM_gender",
         "weight":    "MPFB_HUM_weight",
@@ -100,13 +100,22 @@ def _apply_perfil(human, perfil):
         if key in perfil:
             setattr(human, prop, perfil[key])
 
+    # Aplicar los macros al mesh via TargetService
+    import sys
+    ts = sys.modules.get('bl_ext.blender_org.mpfb.services.targetservice')
+    if ts:
+        ts.TargetService.reapply_macro_details(human)
+        print("  Macros aplicados via TargetService")
+    else:
+        print("  TargetService no disponible, usando refit_human")
+
 
 def apply_skin(human, color=(0.78, 0.55, 0.42)):
     """
-    Crea y aplica material de piel al personaje.
+    Crea y aplica material de piel a todos los mesh del personaje.
 
     Args:
-        human: objeto Blender del personaje
+        human: objeto Blender del personaje (raíz)
         color: RGB tuple del tono de piel
     """
     mat_name = "Skin_Base"
@@ -121,12 +130,17 @@ def apply_skin(human, color=(0.78, 0.55, 0.42)):
     bsdf.inputs["Subsurface Radius"].default_value = (0.8, 0.3, 0.15)
     bsdf.inputs["Subsurface Scale"].default_value = 0.05
 
-    if human.data.materials:
-        human.data.materials[0] = mat
-    else:
-        human.data.materials.append(mat)
+    # Aplicar a todos los mesh relacionados al personaje (body parts de MPFB2)
+    applied_to = []
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH' and obj.name not in ('Studio_Background', 'Dress', 'TShirt', 'Pants'):
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
+            applied_to.append(obj.name)
 
-    print(f"Skin '{mat_name}' aplicada a '{human.name}'")
+    print(f"Skin '{mat_name}' aplicada a: {applied_to}")
     return mat
 
 
