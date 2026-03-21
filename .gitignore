@@ -1,0 +1,19 @@
+# Entorno
+.env
+
+# Renders y assets (pesados, no se versionan)
+renders/
+assets/
+scenes/*.blend1
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
