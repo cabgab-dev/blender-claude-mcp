@@ -8,6 +8,15 @@
         "BLENDER_HOST": "localhost",
         "BLENDER_PORT": "9876"
       }
+    },
+    "n8n-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "n8n-mcp"],
+      "env": {
+        "N8N_API_URL": "http://localhost:5678/api/v1",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMGRjYTE4Mi0xYzE0LTQzYzEtOWYzNC1jYjhmMDg1YzY1YWQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiOWFkZTU0NzMtNjdlNC00NWZhLWE4YjgtZDhlNjU3ZTUyZjdlIiwiaWF0IjoxNzc0MDc1NDQzLCJleHAiOjE3NzY2NTc2MDB9.QrKUBZCdnkUVbOlwNklVPzMS3iY_4-8geg5sReskMLU"
+      }
     }
   }
 }
