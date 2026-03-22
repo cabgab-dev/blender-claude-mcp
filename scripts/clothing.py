@@ -1,12 +1,18 @@
 """
 clothing.py
-Crear y simular prendas sobre el personaje en Blender.
+Crear prendas procedurales sobre el personaje en Blender.
 
-Dos modos:
-  - Procedural: genera mesh básico de vestido/remera directamente
-  - MPFB2: carga prenda desde librería de MPFB2 (requiere assets instalados)
+Prendas disponibles:
+- create_top()    — top sin mangas (ajustado al torso real del personaje)
+- create_skirt()  — falda acampanada
+- create_dress()  — vestido completo (combinación de top + falda)
 
-La prenda usa Cloth modifier para simulación de tela.
+Las dimensiones están calibradas para el personaje MPFB2 con PERFIL_TALLEGR:
+  Human bounds: X [-0.497, 0.497] | Y [-0.326, 0.110] | Z [-0.027, 1.667]
+  Centro Y torso: -0.11 | Radios torso: X ~0.26-0.31, Y ~0.22-0.28
+
+Cloth simulation (add_cloth_modifier + bake_cloth) está disponible pero
+puede exceder el timeout de 180s del socket MCP. Usar con precaución.
 
 Uso desde Claude Code:
   execute_blender_code con el contenido de este script
@@ -18,195 +24,204 @@ import math
 
 
 # ============================================================
-# CONFIGURACIÓN
+# PRESETS DE SIMULACIÓN
 # ============================================================
 CLOTH_PRESETS = {
     "algodon": {
-        "quality":          8,
-        "mass":             0.35,
-        "tension_stiffness": 15.0,
-        "compression_stiffness": 15.0,
-        "shear_stiffness":  5.0,
-        "bending_stiffness": 0.5,
+        "quality": 8, "mass": 0.35,
+        "tension_stiffness": 15.0, "compression_stiffness": 15.0,
+        "shear_stiffness": 5.0, "bending_stiffness": 0.5,
     },
     "denim": {
-        "quality":          10,
-        "mass":             0.8,
-        "tension_stiffness": 40.0,
-        "compression_stiffness": 40.0,
-        "shear_stiffness":  20.0,
-        "bending_stiffness": 5.0,
+        "quality": 10, "mass": 0.8,
+        "tension_stiffness": 40.0, "compression_stiffness": 40.0,
+        "shear_stiffness": 20.0, "bending_stiffness": 5.0,
     },
     "seda": {
-        "quality":          12,
-        "mass":             0.15,
-        "tension_stiffness": 5.0,
-        "compression_stiffness": 5.0,
-        "shear_stiffness":  1.0,
-        "bending_stiffness": 0.05,
+        "quality": 12, "mass": 0.15,
+        "tension_stiffness": 5.0, "compression_stiffness": 5.0,
+        "shear_stiffness": 1.0, "bending_stiffness": 0.05,
     },
 }
+
+# Centro Y del torso del personaje MPFB2 talle grande
+TORSO_CY = -0.11
 # ============================================================
 
 
-def create_dress(location=(0, 0, 0), largo=1.1, radio_cintura=0.28,
-                 radio_falda=0.42, radio_escote=0.16, segments=32):
+def _build_tube(sections, segs=20):
     """
-    Crea un vestido simple procedural (forma de campana).
-
-    Args:
-        location:      posición del centro de la cintura
-        largo:         largo total del vestido en metros
-        radio_cintura: radio en la cintura
-        radio_falda:   radio en el ruedo (más amplio)
-        radio_escote:  radio en el escote
-        segments:      segmentos de la malla (más = más suave)
-
-    Returns:
-        objeto Blender de la prenda
+    Construye un tubo con quads a partir de secciones (cx, cy, cz, rx, ry).
+    Devuelve (mesh, bmesh_obj).
     """
-    mesh = bpy.data.meshes.new("Dress_Mesh")
-    obj = bpy.data.objects.new("Dress", mesh)
-    bpy.context.collection.objects.link(obj)
-
     bm = bmesh.new()
 
-    # Definir secciones del vestido: (altura_relativa, radio)
-    # 0.0 = ruedo, 1.0 = escote
-    secciones = [
-        (0.00, radio_falda),        # Ruedo
-        (0.25, radio_falda * 0.9),  # 1/4 inferior
-        (0.55, radio_cintura),      # Cintura
-        (0.75, radio_cintura * 1.1),# Torso
-        (0.90, radio_cintura * 1.2),# Busto
-        (1.00, radio_escote),       # Escote
+    def ring(cx, cy, cz, rx, ry):
+        return [bm.verts.new((cx + rx * math.cos(2 * math.pi * i / segs),
+                              cy + ry * math.sin(2 * math.pi * i / segs), cz))
+                for i in range(segs)]
+
+    rings = [ring(*s) for s in sections]
+    for i in range(len(rings) - 1):
+        n = len(rings[i])
+        for j in range(n):
+            bm.faces.new([rings[i][j], rings[i][(j+1) % n],
+                          rings[i+1][(j+1) % n], rings[i+1][j]])
+
+    bm.normal_update()
+    return bm
+
+
+def create_top(color=(0.15, 0.25, 0.55), name="Top"):
+    """
+    Top sin mangas ajustado al torso del personaje talle grande.
+
+    Secciones calibradas para no salirse de los brazos en T-pose:
+    radios < 0.32 en X para quedarse en el torso.
+
+    Args:
+        color: RGB del material
+        name:  nombre del objeto
+
+    Returns:
+        objeto Blender
+    """
+    cy = TORSO_CY
+    sections = [
+        (0, cy, 1.28, 0.22, 0.20),  # escote
+        (0, cy, 1.10, 0.26, 0.23),
+        (0, cy, 0.92, 0.29, 0.25),
+        (0, cy, 0.75, 0.30, 0.26),
+        (0, cy, 0.58, 0.29, 0.25),  # ruedo
     ]
 
-    anillos = []
-    for rel_h, radio in secciones:
-        altura = location[2] + rel_h * largo
-        anillo = []
-        for i in range(segments):
-            angle = 2 * math.pi * i / segments
-            x = location[0] + radio * math.cos(angle)
-            y = location[1] + radio * math.sin(angle)
-            v = bm.verts.new((x, y, altura))
-            anillo.append(v)
-        anillos.append(anillo)
-
-    # Conectar anillos con quads
-    for r in range(len(anillos) - 1):
-        for i in range(segments):
-            next_i = (i + 1) % segments
-            bm.faces.new([
-                anillos[r][i],
-                anillos[r][next_i],
-                anillos[r + 1][next_i],
-                anillos[r + 1][i],
-            ])
-
-    # Cerrar ruedo (anillo inferior)
-    centro_ruedo = bm.verts.new((location[0], location[1], location[2]))
-    for i in range(segments):
-        next_i = (i + 1) % segments
-        bm.faces.new([centro_ruedo, anillos[0][i], anillos[0][next_i]])
-
+    bm = _build_tube(sections, segs=20)
+    mesh = bpy.data.meshes.new(f"{name}_Mesh")
     bm.to_mesh(mesh)
     bm.free()
-    mesh.update()
 
-    # Suavizar normales
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.shade_smooth()
 
-    # Subdivisión para mejor simulación de tela
-    subdiv = obj.modifiers.new("Subdivision", 'SUBSURF')
-    subdiv.levels = 2
-    subdiv.render_levels = 2
+    mat = bpy.data.materials.new(f"{name}_Mat")
+    mat.use_nodes = True
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.88
+    bsdf.inputs["Specular IOR Level"].default_value = 0.05
+    bsdf.inputs["Sheen Weight"].default_value = 0.3
+    obj.data.materials.append(mat)
 
-    print(f"Vestido creado: {obj.name}")
+    print(f"{name} creado: dims={[round(d,3) for d in obj.dimensions]}")
     return obj
 
 
-def create_tshirt(location=(0, 0, 0.9), largo=0.55,
-                  radio_cuerpo=0.25, segments=32):
+def create_skirt(color=(0.93, 0.92, 0.90), name="Skirt"):
     """
-    Crea una remera/camiseta básica (tubo con abertura de brazos).
+    Falda acampanada que empieza donde termina el top.
 
     Args:
-        location:     posición del hombro
-        largo:        largo desde hombro hasta borde inferior
-        radio_cuerpo: radio del cuerpo
-        segments:     segmentos de la malla
+        color: RGB del material
+        name:  nombre del objeto
 
     Returns:
-        objeto Blender de la prenda
+        objeto Blender
     """
-    mesh = bpy.data.meshes.new("TShirt_Mesh")
-    obj = bpy.data.objects.new("TShirt", mesh)
-    bpy.context.collection.objects.link(obj)
-
-    bm = bmesh.new()
-
-    secciones = [
-        (0.00, radio_cuerpo * 1.05),  # Ruedo
-        (0.40, radio_cuerpo * 1.0),   # Abdomen
-        (0.70, radio_cuerpo * 0.95),  # Cintura
-        (0.85, radio_cuerpo * 1.05),  # Torso
-        (1.00, radio_cuerpo * 1.1),   # Hombros
+    cy = TORSO_CY
+    sections = [
+        (0, cy, 0.58, 0.29, 0.25),  # cintura (coincide con ruedo del top)
+        (0, cy, 0.42, 0.32, 0.28),
+        (0, cy, 0.20, 0.35, 0.30),
+        (0, cy, 0.02, 0.36, 0.31),  # ruedo
     ]
 
-    base_z = location[2] - largo
-    anillos = []
-    for rel_h, radio in secciones:
-        altura = base_z + rel_h * largo
-        anillo = []
-        for i in range(segments):
-            angle = 2 * math.pi * i / segments
-            x = location[0] + radio * math.cos(angle)
-            y = location[1] + radio * math.sin(angle)
-            v = bm.verts.new((x, y, altura))
-            anillo.append(v)
-        anillos.append(anillo)
-
-    for r in range(len(anillos) - 1):
-        for i in range(segments):
-            next_i = (i + 1) % segments
-            bm.faces.new([
-                anillos[r][i],
-                anillos[r][next_i],
-                anillos[r + 1][next_i],
-                anillos[r + 1][i],
-            ])
-
+    bm = _build_tube(sections, segs=20)
+    mesh = bpy.data.meshes.new(f"{name}_Mesh")
     bm.to_mesh(mesh)
     bm.free()
-    mesh.update()
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
 
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.shade_smooth()
 
-    subdiv = obj.modifiers.new("Subdivision", 'SUBSURF')
-    subdiv.levels = 2
+    mat = bpy.data.materials.new(f"{name}_Mat")
+    mat.use_nodes = True
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.85
+    bsdf.inputs["Sheen Weight"].default_value = 0.25
+    obj.data.materials.append(mat)
 
-    print(f"Remera creada: {obj.name}")
+    print(f"{name} creado: dims={[round(d,3) for d in obj.dimensions]}")
+    return obj
+
+
+def create_dress(color_top=(0.15, 0.25, 0.55), color_skirt=(0.15, 0.25, 0.55), name="Dress"):
+    """
+    Vestido completo: top + falda en una sola prenda, mismo color.
+
+    Args:
+        color_top:   RGB parte superior
+        color_skirt: RGB parte inferior (por defecto igual al top)
+        name:        nombre base del objeto
+
+    Returns:
+        objeto Blender
+    """
+    cy = TORSO_CY
+    sections = [
+        (0, cy, 1.28, 0.22, 0.20),  # escote
+        (0, cy, 1.10, 0.26, 0.23),
+        (0, cy, 0.92, 0.29, 0.25),
+        (0, cy, 0.75, 0.30, 0.26),
+        (0, cy, 0.58, 0.29, 0.25),  # cintura
+        (0, cy, 0.42, 0.32, 0.28),
+        (0, cy, 0.20, 0.35, 0.30),
+        (0, cy, 0.02, 0.36, 0.31),  # ruedo
+    ]
+
+    bm = _build_tube(sections, segs=20)
+    mesh = bpy.data.meshes.new(f"{name}_Mesh")
+    bm.to_mesh(mesh)
+    bm.free()
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.shade_smooth()
+
+    mat = bpy.data.materials.new(f"{name}_Mat")
+    mat.use_nodes = True
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs["Base Color"].default_value = (*color_top, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.87
+    bsdf.inputs["Sheen Weight"].default_value = 0.25
+    obj.data.materials.append(mat)
+
+    print(f"{name} creado: dims={[round(d,3) for d in obj.dimensions]}")
     return obj
 
 
 def add_cloth_modifier(garment_obj, preset="algodon", collision_obj=None):
     """
     Agrega simulación de tela a la prenda.
+    ADVERTENCIA: bake_cloth() puede exceder el timeout de 180s del socket MCP.
 
     Args:
         garment_obj:   objeto de la prenda
         preset:        "algodon", "denim" o "seda"
-        collision_obj: objeto con el que colisiona (el personaje)
+        collision_obj: objeto del personaje para colisión
     """
     cfg = CLOTH_PRESETS.get(preset, CLOTH_PRESETS["algodon"])
 
     bpy.context.view_layer.objects.active = garment_obj
     cloth = garment_obj.modifiers.new("Cloth", 'CLOTH')
-
     s = cloth.settings
     s.quality               = cfg["quality"]
     s.mass                  = cfg["mass"]
@@ -214,71 +229,42 @@ def add_cloth_modifier(garment_obj, preset="algodon", collision_obj=None):
     s.compression_stiffness = cfg["compression_stiffness"]
     s.shear_stiffness       = cfg["shear_stiffness"]
     s.bending_stiffness     = cfg["bending_stiffness"]
+    cloth.collision_settings.use_collision = True
+    cloth.collision_settings.distance_min = 0.003
 
-    # Habilitar colisión con el personaje
-    if collision_obj:
-        if not collision_obj.modifiers.get("Collision"):
-            collision_obj.modifiers.new("Collision", 'COLLISION')
-        print(f"Colisión habilitada: {garment_obj.name} ↔ {collision_obj.name}")
+    if collision_obj and not collision_obj.modifiers.get("Collision"):
+        bpy.context.view_layer.objects.active = collision_obj
+        col_mod = collision_obj.modifiers.new("Collision", 'COLLISION')
+        col_mod.settings.thickness_outer = 0.004
+        bpy.context.view_layer.objects.active = garment_obj
+        print(f"Collision en: {collision_obj.name}")
 
-    print(f"Cloth modifier '{preset}' aplicado a {garment_obj.name}")
+    print(f"Cloth '{preset}' en {garment_obj.name}")
     return cloth
 
 
-def apply_material_to_garment(garment_obj, material):
-    """Aplica un material a la prenda."""
-    if garment_obj.data.materials:
-        garment_obj.data.materials[0] = material
-    else:
-        garment_obj.data.materials.append(material)
-    print(f"Material '{material.name}' → '{garment_obj.name}'")
-
-
-def bake_cloth(frames=30):
+def bake_cloth(frames=25):
     """
-    Bake de la simulación de tela (frames limitados para no exceder timeout).
+    Simula la tela avanzando frame a frame.
+    ADVERTENCIA: puede timeout en el socket MCP con geometría alta.
+    Usar con prenda de <= 3000 verts.
 
     Args:
-        frames: cuántos frames simular (30 = resultado rápido, 80 = más natural)
+        frames: frames a simular (25 = resultado rápido suficiente)
     """
     scene = bpy.context.scene
     scene.frame_start = 1
     scene.frame_end = frames
-    scene.frame_set(1)
+    bpy.ops.ptcache.free_bake_all()
 
-    # Avanzar frame a frame para simular
     for f in range(1, frames + 1):
         scene.frame_set(f)
 
-    print(f"Simulación completada ({frames} frames)")
+    bpy.context.view_layer.update()
+    print(f"Cloth simulado: {frames} frames")
 
 
-# ============================================================
-# Pipeline completo: vestido en escena de estudio
-# ============================================================
 if __name__ == "__main__":
-    # Buscar personaje en escena
-    character = next(
-        (o for o in bpy.context.scene.objects
-         if o.type == 'MESH' and o.name not in ('Studio_Background',)),
-        None
-    )
-
-    # Crear vestido posicionado sobre el personaje
-    dress = create_dress(
-        location=(0, 0, 0),
-        largo=1.05,
-        radio_cintura=0.30,
-        radio_falda=0.45,
-        radio_escote=0.18,
-    )
-
-    # Cloth modifier
-    add_cloth_modifier(dress, preset="algodon", collision_obj=character)
-
-    # Material (algodón blanco)
-    mat = bpy.data.materials.get("Cotton_E5E5E5")
-    if mat:
-        apply_material_to_garment(dress, mat)
-
-    print("clothing.py ejecutado — listo para bake")
+    top   = create_top(color=(0.15, 0.25, 0.55))
+    skirt = create_skirt(color=(0.93, 0.92, 0.90))
+    print("Ropa creada:", top.name, skirt.name)

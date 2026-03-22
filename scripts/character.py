@@ -2,56 +2,66 @@
 character.py
 Crear y configurar personaje femenino talle grande con MPFB2.
 
-Crea un personaje base y ajusta proporciones para representar
-diversidad corporal (talle grande), objetivo central del proyecto
-El Guardarropa de Ana.
-
 Uso desde Claude Code:
   execute_blender_code con el contenido de este script
 """
 
 import bpy
 import math
+import sys
 from mathutils import Vector
 
 
 # ============================================================
-# PERFILES — modificar para distintas proporciones
+# PERFILES
 # ============================================================
 PERFIL_TALLEGR = {
-    "gender":    1.0,   # 0=masculino, 1=femenino
-    "weight":    0.85,  # 0=delgado, 1=robusto
-    "muscle":    0.3,   # 0=sin tono, 1=muy musculoso
-    "age":       0.45,  # 0=joven, 1=mayor
-    "height":    0.55,  # 0=bajo, 1=alto
-    "cupsize":   0.75,  # 0=pequeño, 1=grande
-    "caucasian": 0.5,
-    "african":   0.3,
-    "asian":     0.2,
+    "MPFB_HUM_GENDER":    1.0,
+    "MPFB_HUM_WEIGHT":    0.85,
+    "MPFB_HUM_MUSCLE":    0.3,
+    "MPFB_HUM_AGE":       0.45,
+    "MPFB_HUM_HEIGHT":    0.55,
+    "MPFB_HUM_CUPSIZE":   0.75,
+    "MPFB_HUM_CAUCASIAN": 0.5,
+    "MPFB_HUM_AFRICAN":   0.3,
+    "MPFB_HUM_ASIAN":     0.2,
 }
 
 PERFIL_BASE = {
-    "gender":    1.0,
-    "weight":    0.5,
-    "muscle":    0.5,
-    "age":       0.5,
-    "height":    0.5,
-    "cupsize":   0.55,
-    "caucasian": 0.33,
-    "african":   0.33,
-    "asian":     0.33,
+    "MPFB_HUM_GENDER":    1.0,
+    "MPFB_HUM_WEIGHT":    0.5,
+    "MPFB_HUM_MUSCLE":    0.5,
+    "MPFB_HUM_AGE":       0.5,
+    "MPFB_HUM_HEIGHT":    0.5,
+    "MPFB_HUM_CUPSIZE":   0.55,
+    "MPFB_HUM_CAUCASIAN": 0.33,
+    "MPFB_HUM_AFRICAN":   0.33,
+    "MPFB_HUM_ASIAN":     0.33,
 }
 # ============================================================
 
 
-def create_character(perfil=None, name="Character"):
+def ensure_mpfb2():
+    """Habilita MPFB2 si no está activo. Necesario en sesiones nuevas de Blender."""
+    if sys.modules.get('bl_ext.blender_org.mpfb'):
+        return True
+    import addon_utils
+    for mod in addon_utils.modules():
+        if 'mpfb' in mod.__name__.lower():
+            bpy.ops.preferences.addon_enable(module=mod.__name__)
+            print("MPFB2 habilitado:", mod.__name__)
+            return True
+    print("MPFB2 no encontrado — instalar desde Extensions")
+    return False
+
+
+def create_character(perfil=None, name="Human"):
     """
     Crea un personaje MPFB2 con el perfil de proporciones dado.
 
     Args:
-        perfil: dict con keys gender, weight, muscle, age, height, cupsize,
-                caucasian, african, asian. Si None usa PERFIL_TALLEGR.
-        name: nombre del objeto en Blender
+        perfil: dict con keys MPFB_HUM_*. Si None usa PERFIL_TALLEGR.
+        name:   nombre del objeto en Blender
 
     Returns:
         El objeto Blender del personaje, o None si falló.
@@ -59,109 +69,68 @@ def create_character(perfil=None, name="Character"):
     if perfil is None:
         perfil = PERFIL_TALLEGR
 
-    # Crear humano base
+    ensure_mpfb2()
+
     result = bpy.ops.mpfb.create_human()
     if 'FINISHED' not in result:
-        print(f"Error creando personaje: {result}")
+        print("Error creando personaje:", result)
         return None
 
-    # El objeto recién creado es el activo
     human = bpy.context.active_object
     human.name = name
 
-    # Aplicar proporciones
-    _apply_perfil(human, perfil)
+    for prop, val in perfil.items():
+        if prop in human:
+            human[prop] = val
 
-    # Refit para aplicar los cambios al mesh
-    bpy.ops.mpfb.refit_human()
-
-    # Posicionar en origen
-    human.location = (0, 0, 0)
-
-    print(f"Personaje '{name}' creado")
-    print(f"  Dimensiones: {human.dimensions}")
-    return human
-
-
-def _apply_perfil(human, perfil):
-    """Aplica un dict de proporciones al objeto Human y regenera el mesh."""
-    mapping = {
-        "gender":    "MPFB_HUM_gender",
-        "weight":    "MPFB_HUM_weight",
-        "muscle":    "MPFB_HUM_muscle",
-        "age":       "MPFB_HUM_age",
-        "height":    "MPFB_HUM_height",
-        "cupsize":   "MPFB_HUM_cupsize",
-        "caucasian": "MPFB_HUM_caucasian",
-        "african":   "MPFB_HUM_african",
-        "asian":     "MPFB_HUM_asian",
-    }
-    for key, prop in mapping.items():
-        if key in perfil:
-            setattr(human, prop, perfil[key])
-
-    # Aplicar los macros al mesh via TargetService
-    import sys
     ts = sys.modules.get('bl_ext.blender_org.mpfb.services.targetservice')
     if ts:
         ts.TargetService.reapply_macro_details(human)
-        print("  Macros aplicados via TargetService")
-    else:
-        print("  TargetService no disponible, usando refit_human")
+        print("  Shape keys aplicados")
+
+    human.location = (0, 0, 0)
+    print(f"Personaje '{name}' creado, dims: {[round(d,3) for d in human.dimensions]}")
+    return human
 
 
-def apply_skin(human, color=(0.78, 0.55, 0.42)):
+def apply_skin(human, color=(0.82, 0.62, 0.50)):
     """
     Crea y aplica material de piel a todos los mesh del personaje.
+    Omite objetos de ropa y fondo por nombre.
 
     Args:
-        human: objeto Blender del personaje (raíz)
+        human: objeto Blender raíz del personaje
         color: RGB tuple del tono de piel
     """
-    mat_name = "Skin_Base"
-    mat = bpy.data.materials.get(mat_name) or bpy.data.materials.new(mat_name)
+    mat = bpy.data.materials.get("Skin_Base") or bpy.data.materials.new("Skin_Base")
     mat.use_nodes = True
 
     bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
     bsdf.inputs["Base Color"].default_value = (*color, 1.0)
-    bsdf.inputs["Roughness"].default_value = 0.6
-    bsdf.inputs["Specular IOR Level"].default_value = 0.3
-    bsdf.inputs["Subsurface Weight"].default_value = 0.15
-    bsdf.inputs["Subsurface Radius"].default_value = (0.8, 0.3, 0.15)
-    bsdf.inputs["Subsurface Scale"].default_value = 0.05
+    bsdf.inputs["Roughness"].default_value = 0.75
+    bsdf.inputs["Specular IOR Level"].default_value = 0.15
+    bsdf.inputs["Subsurface Weight"].default_value = 0.25
+    bsdf.inputs["Subsurface Radius"].default_value = (1.0, 0.4, 0.2)
+    bsdf.inputs["Subsurface Scale"].default_value = 0.08
 
-    # Aplicar a todos los mesh relacionados al personaje (body parts de MPFB2)
-    applied_to = []
+    clothing_keywords = ('top', 'tshirt', 'shirt', 'skirt', 'dress', 'pants',
+                         'jacket', 'coat', 'cloth')
+    applied = []
     for obj in bpy.context.scene.objects:
-        if obj.type == 'MESH' and obj.name not in ('Studio_Background', 'Dress', 'TShirt', 'Pants'):
-            if obj.data.materials:
-                obj.data.materials[0] = mat
-            else:
-                obj.data.materials.append(mat)
-            applied_to.append(obj.name)
+        if obj.type != 'MESH':
+            continue
+        if obj.name == 'Studio_Background':
+            continue
+        if any(k in obj.name.lower() for k in clothing_keywords):
+            continue
+        if obj.data.materials:
+            obj.data.materials[0] = mat
+        else:
+            obj.data.materials.append(mat)
+        applied.append(obj.name)
 
-    print(f"Skin '{mat_name}' aplicada a: {applied_to}")
+    print(f"Skin aplicada a: {applied}")
     return mat
-
-
-def setup_character_in_studio(perfil=None, skin_color=(0.78, 0.55, 0.42)):
-    """
-    Pipeline completo: crear personaje + skin en escena de estudio existente.
-    Asume que ya se corrió scene_setup.py y lighting.py.
-
-    Returns:
-        objeto del personaje
-    """
-    # Eliminar personaje anterior si existe
-    for obj in list(bpy.data.objects):
-        if obj.type == 'MESH' and obj.name not in ('Studio_Background',):
-            bpy.data.objects.remove(obj, do_unlink=True)
-
-    human = create_character(perfil=perfil)
-    if human:
-        apply_skin(human, color=skin_color)
-
-    return human
 
 
 def add_rig(human):
@@ -169,19 +138,23 @@ def add_rig(human):
     bpy.context.view_layer.objects.active = human
     bpy.ops.object.select_all(action='DESELECT')
     human.select_set(True)
+
     result = bpy.ops.mpfb.add_standard_rig()
     if 'FINISHED' not in result:
         print("Error agregando rig:", result)
         return None
+
     rig = next((o for o in bpy.context.scene.objects if o.type == 'ARMATURE'), None)
-    print(f"Rig agregado: {rig.name} ({len(rig.data.bones)} huesos)")
+    if rig:
+        print(f"Rig: {rig.name} ({len(rig.data.bones)} huesos)")
     return rig
 
 
 def apply_standing_pose(rig):
     """
     Aplica pose parada natural con brazos colgando al costado.
-    Calculada geométricamente a partir de los ejes locales del rig MPFB2.
+    Usa rotation_difference() geométrico para calcular la rotación correcta
+    independientemente de los ejes locales del rig MPFB2.
     """
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode='POSE')
@@ -189,7 +162,9 @@ def apply_standing_pose(rig):
     bpy.ops.pose.rot_clear()
 
     def arm_down(bone_name, side='L'):
-        pb = rig.pose.bones[bone_name]
+        pb = rig.pose.bones.get(bone_name)
+        if not pb:
+            return
         mat_world = rig.matrix_world @ pb.bone.matrix_local
         current_dir = mat_world.col[1].xyz.normalized()
         sign = 1 if side == 'L' else -1
@@ -219,9 +194,10 @@ def apply_standing_pose(rig):
 
 # Ejecutar al correr el script directamente
 if __name__ == "__main__":
-    personaje = setup_character_in_studio(perfil=PERFIL_TALLEGR)
-    if personaje:
-        rig = add_rig(personaje)
+    human = create_character(perfil=PERFIL_TALLEGR)
+    if human:
+        apply_skin(human)
+        rig = add_rig(human)
         if rig:
             apply_standing_pose(rig)
-        print(f"Listo: {personaje.name} en escena")
+        print(f"Listo: {human.name}")
