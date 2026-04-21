@@ -248,6 +248,7 @@ def bake_cloth(frames=25):
     Simula la tela avanzando frame a frame.
     ADVERTENCIA: puede timeout en el socket MCP con geometría alta.
     Usar con prenda de <= 3000 verts.
+    Para geometría mayor usar bake_cloth_part1() + bake_cloth_part2().
 
     Args:
         frames: frames a simular (25 = resultado rápido suficiente)
@@ -262,6 +263,58 @@ def bake_cloth(frames=25):
 
     bpy.context.view_layer.update()
     print(f"Cloth simulado: {frames} frames")
+
+
+def bake_cloth_part1(frames_end=15):
+    """
+    Primera mitad del bake de cloth (llamada 1 al bridge).
+    Configura el rango de frames, limpia caché y simula frames 1..frames_end.
+
+    Usar junto con bake_cloth_part2() para evitar el timeout de 120s:
+      - Llamada bridge 1: bake_cloth_part1(15)
+      - Llamada bridge 2: bake_cloth_part2(garment_obj, 16, 30)
+
+    Args:
+        frames_end: último frame de esta mitad (default 15)
+    """
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = 30  # rango total; la segunda llamada completará
+    bpy.ops.ptcache.free_bake_all()
+
+    for f in range(1, frames_end + 1):
+        scene.frame_set(f)
+
+    bpy.context.view_layer.update()
+    print(f"Cloth parte 1 simulada: frames 1-{frames_end}")
+
+
+def bake_cloth_part2(garment_obj, frames_start=16, frames_end=30):
+    """
+    Segunda mitad del bake de cloth (llamada 2 al bridge).
+    Continúa la simulación y aplica el modifier para congelar la pose.
+
+    Args:
+        garment_obj:  objeto de la prenda con modifier Cloth activo
+        frames_start: primer frame de esta mitad (default 16)
+        frames_end:   último frame (default 30)
+    """
+    scene = bpy.context.scene
+
+    for f in range(frames_start, frames_end + 1):
+        scene.frame_set(f)
+
+    bpy.context.view_layer.update()
+    print(f"Cloth parte 2 simulada: frames {frames_start}-{frames_end}")
+
+    # Aplicar modifier para congelar la geometría en el frame actual
+    bpy.context.view_layer.objects.active = garment_obj
+    garment_obj.select_set(True)
+    try:
+        bpy.ops.object.modifier_apply(modifier="Cloth")
+        print("Modifier Cloth aplicado — geometría congelada")
+    except Exception as e:
+        print(f"No se pudo aplicar Cloth modifier: {e}")
 
 
 if __name__ == "__main__":

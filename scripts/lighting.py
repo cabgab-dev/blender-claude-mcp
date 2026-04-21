@@ -16,7 +16,7 @@ import math
 import os
 
 # HDRI incluido en el proyecto
-HDRI_PATH = r"C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\Blender\blender-claude-mcp\assets\hdri\studio_small_08_1k.hdr"
+HDRI_PATH = r"C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\blender-pipeline\assets\hdri\studio_small_08_1k.hdr"
 
 
 def setup_hdri_lighting(strength=1.5, hdri_path=None):

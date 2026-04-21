@@ -192,6 +192,147 @@ def apply_standing_pose(rig):
     print("Pose parada aplicada")
 
 
+def add_hair_basic(human, length=0.25, color=(0.15, 0.08, 0.05)):
+    """
+    Agrega cabello procedural básico al personaje usando sistema de partículas.
+    No requiere MPFB2 ni addons externos.
+
+    Args:
+        human:  objeto Blender del personaje (mesh o raíz del rig)
+        length: largo de las hebras en metros (default 0.25 = cabello medio)
+        color:  RGB del color del cabello (default castaño oscuro)
+
+    Returns:
+        ParticleSystem o None si no se encontró mesh válido
+    """
+    # Buscar el mesh del personaje (puede ser el objeto directo o un hijo)
+    mesh_obj = None
+    if human.type == 'MESH':
+        mesh_obj = human
+    else:
+        for child in human.children_recursive:
+            if child.type == 'MESH' and 'body' in child.name.lower():
+                mesh_obj = child
+                break
+        if not mesh_obj:
+            for child in human.children_recursive:
+                if child.type == 'MESH':
+                    mesh_obj = child
+                    break
+
+    if not mesh_obj:
+        print("add_hair_basic: no se encontró mesh del personaje")
+        return None
+
+    bpy.context.view_layer.objects.active = mesh_obj
+    bpy.ops.object.particle_system_add()
+
+    psys = mesh_obj.particle_systems[-1]
+    psys.name = "Hair_Basic"
+
+    s = psys.settings
+    s.type = 'HAIR'
+    s.count = 800
+    s.hair_length = length
+    s.render_type = 'PATH'
+    s.display_step = 3
+    s.render_step = 5
+    s.root_radius = 0.003
+    s.tip_radius = 0.0005
+    s.use_strand_primitive = True
+    s.child_type = 'INTERPOLATED'
+    s.child_nbr = 6
+    s.rendered_child_count = 12
+    s.clump_factor = 0.4
+    s.roughness_1 = 0.015
+    s.roughness_endpoint = 0.02
+
+    # Material de cabello
+    mat = bpy.data.materials.get("Hair_Mat") or bpy.data.materials.new("Hair_Mat")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    nodes.clear()
+
+    hair_bsdf = nodes.new('ShaderNodeBsdfHairPrincipled')
+    hair_bsdf.parametrization = 'COLOR'
+    hair_bsdf.inputs["Color"].default_value = (*color, 1.0)
+    hair_bsdf.inputs["Roughness"].default_value = 0.35
+    hair_bsdf.inputs["Radial Roughness"].default_value = 0.45
+
+    output = nodes.new('ShaderNodeOutputMaterial')
+    mat.node_tree.links.new(hair_bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+    mesh_obj.data.materials.append(mat)
+    s.material = len(mesh_obj.data.materials)
+
+    print(f"Cabello añadido: {s.count} hebras, largo={length}m, color={color}")
+    return psys
+
+
+def pose_tres_cuartos(rig):
+    """
+    Gira el cuerpo 30° en Z para una pose 3/4 más dinámica.
+    Rota el bone raíz (hips/pelvis/root) del rig MPFB2.
+
+    Args:
+        rig: objeto Armature de Blender
+    """
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='POSE')
+
+    root_candidates = ["root", "Root", "hips", "Hips", "pelvis",
+                       "Pelvis", "master", "Master", "spine_master"]
+    rotated = False
+    for name in root_candidates:
+        pb = rig.pose.bones.get(name)
+        if pb:
+            pb.rotation_mode = 'XYZ'
+            pb.rotation_euler.z = math.radians(30)
+            print(f"Pose 3/4: '{name}' girado 30° en Z")
+            rotated = True
+            break
+
+    if not rotated:
+        # Fallback: rotar el armature completo en object mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+        rig.rotation_euler.z = math.radians(30)
+        print("Pose 3/4: rotación aplicada al armature completo (fallback)")
+        return
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def pose_detalle_superior():
+    """
+    Reposiciona la cámara a altura de cintura para mostrar detalle
+    de la parte superior de la prenda (busto, escote, hombros).
+
+    Posición: Y=-3.5, Z=1.1  apuntando al centro del torso.
+    """
+    cam = bpy.data.objects.get("Camera")
+    if not cam:
+        # Buscar cualquier cámara en la escena
+        for obj in bpy.data.objects:
+            if obj.type == 'CAMERA':
+                cam = obj
+                break
+
+    if not cam:
+        print("pose_detalle_superior: cámara no encontrada en la escena")
+        return
+
+    cam.location = (0.0, -3.5, 1.1)
+
+    # Apuntar al torso (Z=1.05 ≈ nivel pecho del personaje)
+    import mathutils
+    target = mathutils.Vector((0.0, 0.0, 1.05))
+    direction = target - mathutils.Vector(cam.location)
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    cam.rotation_euler = rot_quat.to_euler()
+
+    print(f"Cámara reposicionada a nivel cintura: loc={cam.location[:]}, apunta a torso Z=1.05")
+
+
 # Ejecutar al correr el script directamente
 if __name__ == "__main__":
     human = create_character(perfil=PERFIL_TALLEGR)

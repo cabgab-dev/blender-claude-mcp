@@ -3,8 +3,9 @@ render.py
 Configurar y ejecutar renders con Cycles en Blender.
 
 Modos:
-- PREVIEW    — Cycles 64 samples, rápido para verificar composición
-- PRODUCTION — Cycles 256 samples, denoising, para render final
+- PREVIEW    — Cycles 64 samples,  800×1100, rápido para verificar composición
+- PRODUCTION — Cycles 256 samples, 800×1100, denoising, para render final
+- ECOMMERCE  — Cycles 512 samples, 1920×2560, OIDN denoising, calidad máxima
 
 Uso desde Claude Code:
   execute_blender_code con el contenido de este script
@@ -17,7 +18,7 @@ from datetime import datetime
 
 # ============================================================
 RENDER_MODE  = "PREVIEW"
-OUTPUT_PATH  = r"C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\Blender\blender-claude-mcp\renders\auto\render_001.png"
+OUTPUT_PATH  = r"C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\blender-pipeline\renders\auto\render_001.png"
 RESOLUTION_X = 800
 RESOLUTION_Y = 1100
 # ============================================================
@@ -71,6 +72,28 @@ def configure_render(mode="PREVIEW", output_path=None, res_x=800, res_y=1100):
             print("Usando CPU")
 
         print(f"PRODUCTION: Cycles 256 samples | denoiser={scene.cycles.denoiser} | {res_x}x{res_y}")
+
+    elif mode == "ECOMMERCE":
+        scene.render.resolution_x = 1920
+        scene.render.resolution_y = 2560
+        scene.cycles.samples = 512
+        scene.cycles.use_denoising = True
+        scene.cycles.denoiser = 'OPENIMAGEDENOISE'
+
+        # GPU si está disponible
+        try:
+            prefs = bpy.context.preferences.addons['cycles'].preferences
+            prefs.compute_device_type = 'CUDA'
+            prefs.get_devices()
+            for d in prefs.devices:
+                d.use = True
+            scene.cycles.device = 'GPU'
+            print("GPU habilitada (CUDA)")
+        except Exception:
+            scene.cycles.device = 'CPU'
+            print("Usando CPU")
+
+        print(f"ECOMMERCE: Cycles 512 samples | OIDN | 1920x2560")
 
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
