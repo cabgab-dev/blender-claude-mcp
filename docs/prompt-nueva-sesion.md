@@ -5,7 +5,7 @@
 Estamos trabajando en el **pipeline automatizado de renders de moda para EGDA (El Guardarropa de Ana)**, marca de ropa en talles grandes.
 
 ## Directorio de trabajo
-`C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\blender-pipeline`
+`C:\Users\cabga\Desktop\MI-AUTOMATIZACION\blender-pipeline`
 
 El plan completo está en `docs/plan-egda-produccion.md`. Leelo antes de empezar.
 
@@ -61,11 +61,11 @@ URL: `https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/studio_small_08_4k.hd
 # 1. Abrir Blender 5.1 → N → BlenderMCP → Connect (puerto 9876)
 
 # 2. Levantar blender-bridge (rebuild obligatorio — bridge.py cambió)
-cd C:/Users/cabga/OneDrive1/Escritorio/MI-AUTOMATIZACION/infra
+cd C:/Users/cabga/Desktop/MI-AUTOMATIZACION/infra
 docker compose -f docker-compose.blender.yml up -d --build
 
 # 3. n8n ya corre como parte del stack alfred
-cd C:/Users/cabga/OneDrive1/Escritorio/MI-AUTOMATIZACION/alfred/config
+cd C:/Users/cabga/Desktop/MI-AUTOMATIZACION/alfred/config
 docker compose up -d
 
 # Health check

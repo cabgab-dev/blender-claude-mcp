@@ -1,5 +1,6 @@
 # Entorno
 .env
+.mcp.json
 
 # Renders y assets (pesados, no se versionan)
 renders/

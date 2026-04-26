@@ -9,14 +9,14 @@
 
 ### 2. Levantar blender-bridge (Docker)
 ```bash
-cd C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\infra
+cd C:\Users\cabga\Desktop\MI-AUTOMATIZACION\infra
 docker compose -f docker-compose.blender.yml up -d --build
 ```
 Verificar: `curl http://localhost:9877/health` → debe devolver `{"status":"ok"}`
 
 ### 3. Levantar n8n
 ```bash
-cd C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\alfred\config
+cd C:\Users\cabga\Desktop\MI-AUTOMATIZACION\alfred\config
 docker compose up -d
 ```
 

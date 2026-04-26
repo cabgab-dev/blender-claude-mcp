@@ -18,7 +18,7 @@ from datetime import datetime
 
 # ============================================================
 RENDER_MODE  = "PREVIEW"
-OUTPUT_PATH  = r"C:\Users\cabga\OneDrive1\Escritorio\MI-AUTOMATIZACION\blender-pipeline\renders\auto\render_001.png"
+OUTPUT_PATH  = r"C:\Users\cabga\Desktop\MI-AUTOMATIZACION\blender-pipeline\renders\auto\render_001.png"
 RESOLUTION_X = 800
 RESOLUTION_Y = 1100
 # ============================================================

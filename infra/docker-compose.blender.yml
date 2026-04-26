@@ -1,0 +1,33 @@
+# docker-compose.blender.yml
+# Solo el bridge HTTP entre n8n y Blender.
+# n8n y el resto del stack se manejan desde alfred/config/docker-compose.yml
+
+services:
+  blender-bridge:
+    build: ./blender-bridge
+    container_name: blender_bridge
+    restart: always
+    ports:
+      - "9877:9877"
+    environment:
+      - BLENDER_HOST=host.docker.internal
+      - BLENDER_PORT=9876
+      # Timeouts por mode (bridge v2.1.0):
+      # SOCKET_TIMEOUT es el fallback genérico
+      # Los tres siguientes son los timeouts específicos por mode
+      - SOCKET_TIMEOUT=120
+      - SOCKET_TIMEOUT_PREVIEW=120
+      - SOCKET_TIMEOUT_PRODUCTION=600
+      - SOCKET_TIMEOUT_ECOMMERCE=900
+      - RENDERS_DIR=/renders
+      - ASSETS_DIR=/assets
+      # Rutas Windows del host (para los scripts que se ejecutan en Blender)
+      - RENDERS_DIR_WIN=C:/Users/cabga/Desktop/MI-AUTOMATIZACION/blender-pipeline/renders/auto
+      - ASSETS_DIR_WIN=C:/Users/cabga/Desktop/MI-AUTOMATIZACION/blender-pipeline/assets
+    volumes:
+      # Monta la carpeta de renders para que el bridge pueda leer los PNG
+      - C:/Users/cabga/Desktop/MI-AUTOMATIZACION/blender-pipeline/renders/auto:/renders
+      # Monta los assets (logo EGDA para watermark, HDRI, texturas Polyhaven)
+      - C:/Users/cabga/Desktop/MI-AUTOMATIZACION/blender-pipeline/assets:/assets
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
